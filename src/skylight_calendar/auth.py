@@ -28,9 +28,10 @@ import secrets
 import uuid
 from dataclasses import dataclass, field
 
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
-import httpx
+from ._http import TRANSPORT_ERRORS, default_client, require_httpx
 
 from .const import (
     BASE_URL,
@@ -43,6 +44,9 @@ from .const import (
 )
 from .errors import SkylightAuthError, SkylightError
 from .tokens import Credentials
+
+if TYPE_CHECKING:
+    import httpx
 
 _CSRF_INPUT = re.compile(r'name=["\']authenticity_token["\'][^>]*value=["\']([^"\']+)["\']', re.I)
 _CSRF_INPUT_REV = re.compile(r'value=["\']([^"\']+)["\'][^>]*name=["\']authenticity_token["\']', re.I)
@@ -234,7 +238,7 @@ def login(
     """Log in with an email and password and return :class:`Credentials`."""
     flow = _Flow(base_url=base_url, device_fingerprint=device_fingerprint or uuid.uuid4().hex)
     owns = http is None
-    client = http or httpx.Client(timeout=timeout)
+    client = http or default_client(timeout)
     try:
         try:
             # 1. authorize -> login form
@@ -270,7 +274,7 @@ def login(
 
             # 3. exchange the code
             resp = client.post(flow.token_url, data=flow.token_form(code), headers=_TOKEN_HEADERS)
-        except httpx.HTTPError as exc:
+        except TRANSPORT_ERRORS as exc:
             raise SkylightError(f"Network error during Skylight login: {exc}") from exc
         return _credentials_from(resp, flow.device_fingerprint, "Token exchange")
     finally:
@@ -289,7 +293,7 @@ def refresh(
     if not credentials.refresh_token:
         raise SkylightAuthError("No refresh token available; log in again")
     owns = http is None
-    client = http or httpx.Client(timeout=timeout)
+    client = http or default_client(timeout)
     try:
         try:
             resp = client.post(
@@ -297,7 +301,7 @@ def refresh(
                 data=_refresh_form(credentials.refresh_token, credentials.device_fingerprint),
                 headers=_TOKEN_HEADERS,
             )
-        except httpx.HTTPError as exc:
+        except TRANSPORT_ERRORS as exc:
             raise SkylightError(f"Network error during token refresh: {exc}") from exc
         fresh = _credentials_from(resp, credentials.device_fingerprint, "Token refresh")
         if not fresh.refresh_token:
@@ -325,7 +329,7 @@ async def async_login(
     """Async twin of :func:`login`."""
     flow = _Flow(base_url=base_url, device_fingerprint=device_fingerprint or uuid.uuid4().hex)
     owns = http is None
-    client = http or httpx.AsyncClient(timeout=timeout)
+    client = http or require_httpx("async login").AsyncClient(timeout=timeout)
     try:
         try:
             resp = await client.get(flow.authorize_url(), headers=_HTML_HEADERS, follow_redirects=False)
@@ -358,7 +362,7 @@ async def async_login(
             code = flow.parse_callback(location or "")
 
             resp = await client.post(flow.token_url, data=flow.token_form(code), headers=_TOKEN_HEADERS)
-        except httpx.HTTPError as exc:
+        except TRANSPORT_ERRORS as exc:
             raise SkylightError(f"Network error during Skylight login: {exc}") from exc
         return _credentials_from(resp, flow.device_fingerprint, "Token exchange")
     finally:
@@ -377,7 +381,7 @@ async def async_refresh(
     if not credentials.refresh_token:
         raise SkylightAuthError("No refresh token available; log in again")
     owns = http is None
-    client = http or httpx.AsyncClient(timeout=timeout)
+    client = http or require_httpx("async login").AsyncClient(timeout=timeout)
     try:
         try:
             resp = await client.post(
@@ -385,7 +389,7 @@ async def async_refresh(
                 data=_refresh_form(credentials.refresh_token, credentials.device_fingerprint),
                 headers=_TOKEN_HEADERS,
             )
-        except httpx.HTTPError as exc:
+        except TRANSPORT_ERRORS as exc:
             raise SkylightError(f"Network error during token refresh: {exc}") from exc
         fresh = _credentials_from(resp, credentials.device_fingerprint, "Token refresh")
         if not fresh.refresh_token:
@@ -440,11 +444,11 @@ class BrowserLogin:
     def exchange(self, pasted: str, *, http: httpx.Client | None = None, timeout: float = DEFAULT_TIMEOUT) -> Credentials:
         code = self._code(pasted)
         owns = http is None
-        client = http or httpx.Client(timeout=timeout)
+        client = http or default_client(timeout)
         try:
             try:
                 resp = client.post(self._flow.token_url, data=self._flow.token_form(code), headers=_TOKEN_HEADERS)
-            except httpx.HTTPError as exc:
+            except TRANSPORT_ERRORS as exc:
                 raise SkylightError(f"Network error during token exchange: {exc}") from exc
             return _credentials_from(resp, self._flow.device_fingerprint, "Token exchange")
         finally:
@@ -456,11 +460,11 @@ class BrowserLogin:
     ) -> Credentials:
         code = self._code(pasted)
         owns = http is None
-        client = http or httpx.AsyncClient(timeout=timeout)
+        client = http or require_httpx("async login").AsyncClient(timeout=timeout)
         try:
             try:
                 resp = await client.post(self._flow.token_url, data=self._flow.token_form(code), headers=_TOKEN_HEADERS)
-            except httpx.HTTPError as exc:
+            except TRANSPORT_ERRORS as exc:
                 raise SkylightError(f"Network error during token exchange: {exc}") from exc
             return _credentials_from(resp, self._flow.device_fingerprint, "Token exchange")
         finally:

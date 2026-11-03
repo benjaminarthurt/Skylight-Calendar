@@ -12,6 +12,7 @@ may break when Skylight changes it.
 
 from __future__ import annotations
 
+from ._http import StdlibClient, TransportError
 from ._ops import Operation
 from .auth import BrowserLogin, async_login, async_refresh, login, refresh
 from .client import AsyncSkylightClient, SkylightClient
@@ -46,7 +47,7 @@ from .models import (
 )
 from .tokens import Credentials, FileTokenStore, MemoryTokenStore, TokenStore, default_token_path
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "AsyncSkylightClient",
@@ -79,8 +80,10 @@ __all__ = [
     "SkylightRateLimitError",
     "SkylightValidationError",
     "SourceCalendar",
+    "StdlibClient",
     "TaskBoxItem",
     "TokenStore",
+    "TransportError",
     "User",
     "__version__",
     "async_login",

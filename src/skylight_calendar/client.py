@@ -18,11 +18,11 @@ import os
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timedelta
 from typing import Any, TypeVar
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-import httpx
-
 from . import _ops as ops
+from ._http import TRANSPORT_ERRORS, default_client, require_httpx
 from . import auth as _auth
 from .const import (
     API_USER_AGENT,
@@ -67,6 +67,9 @@ from .models import (
     User,
 )
 from .tokens import Credentials, FileTokenStore, TokenStore
+
+if TYPE_CHECKING:
+    import httpx
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -257,7 +260,7 @@ class SkylightClient(_Core):
     def __init__(self, *, http: httpx.Client | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._owns_http = http is None
-        self._http = http or httpx.Client(timeout=self._timeout)
+        self._http = http or default_client(self._timeout)
 
     @classmethod
     def from_env(cls, *, token_store: TokenStore | None = None, **overrides: Any) -> "SkylightClient":
@@ -352,7 +355,7 @@ class SkylightClient(_Core):
                 json=op.json if op.has_body else None,
                 headers=self._headers(token, op),
             )
-        except httpx.HTTPError as exc:
+        except TRANSPORT_ERRORS as exc:
             raise SkylightError(f"Network error talking to Skylight: {exc}") from exc
         if resp.status_code == 401 and retry:
             _LOGGER.debug("Skylight 401 on %s %s; re-authenticating", op.method, op.path)
@@ -849,7 +852,7 @@ class AsyncSkylightClient(_Core):
     def __init__(self, *, http: httpx.AsyncClient | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._owns_http = http is None
-        self._http = http or httpx.AsyncClient(timeout=self._timeout)
+        self._http = http or require_httpx("AsyncSkylightClient").AsyncClient(timeout=self._timeout)
 
     @classmethod
     def from_env(cls, *, token_store: TokenStore | None = None, **overrides: Any) -> "AsyncSkylightClient":
@@ -934,7 +937,7 @@ class AsyncSkylightClient(_Core):
                 json=op.json if op.has_body else None,
                 headers=self._headers(token, op),
             )
-        except httpx.HTTPError as exc:
+        except TRANSPORT_ERRORS as exc:
             raise SkylightError(f"Network error talking to Skylight: {exc}") from exc
         if resp.status_code == 401 and retry:
             _LOGGER.debug("Skylight 401 on %s %s; re-authenticating", op.method, op.path)

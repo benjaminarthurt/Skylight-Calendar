@@ -19,7 +19,13 @@ pip install git+https://github.com/benjaminarthurt/Skylight-Calendar
 pip install -e .
 ```
 
-Python 3.11+; the only dependency is `httpx`.
+Python 3.11+, with **no required dependencies**: the sync client and the login run
+on the standard library. If `httpx` is installed it is used instead, and
+`AsyncSkylightClient` needs it:
+
+```bash
+pip install 'skylight-calendar[httpx] @ git+https://github.com/benjaminarthurt/Skylight-Calendar'
+```
 
 ## Log in once
 
@@ -111,6 +117,20 @@ SkylightClient(email=..., password=..., token_store=FileTokenStore("/srv/app/sky
 SkylightClient(access_token="...")                         # fixed token, e.g. from a secret store
 SkylightClient(credentials=Credentials(access_token=..., refresh_token=...))
 ```
+
+### Without httpx
+
+With `httpx` absent, `SkylightClient` uses `StdlibClient`, a small `urllib`
+transport (cookies kept, redirects returned, not followed). Pass one yourself to
+refuse to send a token anywhere but Skylight, whatever URL the client is given:
+
+```python
+from skylight_calendar import SkylightClient, StdlibClient
+
+client = SkylightClient(credentials=creds, http=StdlibClient(allowed_hosts={"app.ourskylight.com"}))
+```
+
+A refused host, a timeout or a dropped connection raises `SkylightError`.
 
 ### Async
 
